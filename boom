@@ -1,531 +1,462 @@
--- Services
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local TextChatService = game:GetService("TextChatService")
-local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local player = Players.LocalPlayer
+-- Wrap everything in an immediately executed function
+return (function()
+    -- Services
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local RunService = game:GetService("RunService")
+    local TextChatService = game:GetService("TextChatService")
+    local Workspace = game:GetService("Workspace")
+    local Lighting = game:GetService("Lighting")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local player = Players.LocalPlayer
+    if not player then return end -- Safety check
 
--- State
-local isSpamming = false
-local parts, beams = {}, {}
-local musicSound
-local discoSkyTween
+    -- State
+    local isSpamming = false
+    local parts, beams = {}, {}
+    local musicSound
+    local discoSkyTween
 
--- Helper: Rainbow color generator
-local function getRainbowColor(speed, offset)
-    local h = (tick() * speed + (offset or 0)) % 1
-    return Color3.fromHSV(h, 1, 1)
-end
+    -- Helper: Rainbow color generator
+    local function getRainbowColor(speed, offset)
+        local h = (tick() * speed + (offset or 0)) % 1
+        return Color3.fromHSV(h, 1, 1)
+    end
 
--- Black-white glow tween for labels
-local function glowBlackWhiteLabel(label)
-    local goal1 = {TextColor3 = Color3.new(0, 0, 0)}
-    local goal2 = {TextColor3 = Color3.new(1, 1, 1)}
-    local tweenInfo = TweenInfo.new(5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
-    local tween1 = TweenService:Create(label, tweenInfo, goal1)
-    local tween2 = TweenService:Create(label, tweenInfo, goal2)
-    tween1:Play()
-    tween1.Completed:Connect(function()
-        tween2:Play()
-    end)
-    tween2.Completed:Connect(function()
+    -- Tween helper for black-white glow
+    local function glowBlackWhiteLabel(label)
+        local goal1 = {TextColor3 = Color3.new(0,0,0)}
+        local goal2 = {TextColor3 = Color3.new(1,1,1)}
+        local tweenInfo = TweenInfo.new(5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+        local tween1 = TweenService:Create(label, tweenInfo, goal1)
+        local tween2 = TweenService:Create(label, tweenInfo, goal2)
         tween1:Play()
-    end)
-end
+        tween1.Completed:Connect(function()
+            tween2:Play()
+        end)
+        tween2.Completed:Connect(function()
+            tween1:Play()
+        end)
+    end
 
--- Part Spammer (spawns 40 parts, radius 500, beams 0.5 studs, connects up to 50 parts)
-local function startSpamming()
-    if isSpamming then return end
-    isSpamming = true
-    spawn(function()
-        while isSpamming do
-            -- Clear old parts/beams first
-            for _, p in ipairs(parts) do if p.Parent then p:Destroy() end end
-            for _, b in ipairs(beams) do if b.Parent then b:Destroy() end end
-            parts, beams = {}, {}
+    -- Spam logic (parts + beams)
+    local function startSpamming()
+        if isSpamming then return end
+        isSpamming = true
+        spawn(function()
+            while isSpamming do
+                local last
+                for i = 1, 40 do -- doubled parts count
+                    local p = Instance.new("Part", workspace)
+                    p.Anchored = true
+                    p.CanCollide = false
+                    p.Size = Vector3.new(5,5,5)
+                    p.Position = Vector3.new(math.random(-500,500), math.random(10,200), math.random(-500,500)) -- radius 500
+                    p.Color = getRainbowColor(0.2, i*0.05)
+                    p.Material = Enum.Material.Neon
+                    table.insert(parts, p)
 
-            local lastParts = {}
-            for i = 1, 40 do
-                local p = Instance.new("Part")
-                p.Anchored = true
-                p.CanCollide = false
-                p.Size = Vector3.new(5,5,5)
-                p.Position = Vector3.new(
-                    math.random(-500, 500),
-                    math.random(10, 200),
-                    math.random(-500, 500)
-                )
-                p.Color = getRainbowColor(0.2, i*0.05)
-                p.Material = Enum.Material.Neon
-                p.Parent = workspace
-                table.insert(parts, p)
-            end
-
-            -- Connect up to 50 parts with beams 0.5 studs wide
-            for i = 1, math.min(50, #parts-1) do
-                local partA = parts[i]
-                local partB = parts[i+1]
-                if partA and partB then
-                    local attach0 = Instance.new("Attachment", partA)
-                    local attach1 = Instance.new("Attachment", partB)
-                    local beam = Instance.new("Beam", partA)
-                    beam.Attachment0 = attach0
-                    beam.Attachment1 = attach1
-                    beam.Width0 = 0.5
-                    beam.Width1 = 0.5
-                    beam.Color = ColorSequence.new(getRainbowColor(0.2, i*0.05), getRainbowColor(0.2, i*0.05+0.5))
-                    beam.FaceCamera = true
-                    beam.LightEmission = 1
-                    table.insert(beams, beam)
+                    if last and i <= 50 then -- connect beams up to 50 parts
+                        local a0 = Instance.new("Attachment", last)
+                        local a1 = Instance.new("Attachment", p)
+                        local beam = Instance.new("Beam", last)
+                        beam.Attachment0 = a0
+                        beam.Attachment1 = a1
+                        beam.Width0 = 0.5 -- beam width 0.5 studs
+                        beam.Width1 = 0.5
+                        beam.Color = ColorSequence.new(getRainbowColor(0.2, i*0.05), getRainbowColor(0.2, i*0.05+0.5))
+                        beam.FaceCamera = true
+                        beam.LightEmission = 1
+                        table.insert(beams, beam)
+                    end
+                    last = p
                 end
+                wait(0.3)
             end
-            wait(0.3)
-        end
-    end)
-end
-
-local function stopSpamming()
-    isSpamming = false
-    for _, p in ipairs(parts) do if p.Parent then p:Destroy() end end
-    for _, b in ipairs(beams) do if b.Parent then b:Destroy() end end
-    parts, beams = {}, {}
-end
-
--- Music controls
-local function playMusic(id)
-    if musicSound then musicSound:Destroy() end
-    musicSound = Instance.new("Sound", workspace)
-    musicSound.SoundId = "rbxassetid://"..id
-    musicSound.Looped = true
-    musicSound.Volume = 1
-    musicSound:Play()
-end
-
-local function stopMusic()
-    if musicSound then musicSound:Destroy() musicSound = nil end
-end
-
--- Delete Terrain button action
-local function deleteTerrain()
-    if Workspace:FindFirstChild("Terrain") then
-        Workspace.Terrain:Clear()
+        end)
     end
-end
 
--- Create button helper with deep purple and rounded corners
-local function createButton(parent, text, posX, posY, width, height, callback)
-    local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0, width or 150, 0, height or 30)
-    btn.Position = UDim2.new(0, posX, 0, posY)
-    btn.Text = text
-    btn.BackgroundColor3 = Color3.fromRGB(88, 36, 133) -- Deep purple
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.AutoButtonColor = true
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 14
-    local corner = Instance.new("UICorner", btn)
-    corner.CornerRadius = UDim.new(0, 6)
-    btn.MouseButton1Click:Connect(callback)
-    return btn
-end
-
--- Create label helper with black-white glow tween
-local function createRainbowLabel(parent, text, posX, posY)
-    local lbl = Instance.new("TextLabel", parent)
-    lbl.Size = UDim2.new(0, 200, 0, 24)
-    lbl.Position = UDim2.new(0, posX, 0, posY)
-    lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 18
-    lbl.Text = text
-    lbl.TextColor3 = Color3.new(1,1,1)
-    glowBlackWhiteLabel(lbl)
-    return lbl
-end
-
--- Create TextBox helper with black background, white text, rounded corners
-local function createTextBox(parent, placeholder, posX, posY, width, height)
-    local box = Instance.new("TextBox", parent)
-    box.Size = UDim2.new(0, width or 200, 0, height or 30)
-    box.Position = UDim2.new(0, posX, 0, posY)
-    box.PlaceholderText = placeholder or ""
-    box.TextColor3 = Color3.new(1,1,1)
-    box.BackgroundColor3 = Color3.new(0,0,0)
-    box.ClearTextOnFocus = false
-    box.Text = ""
-    local corner = Instance.new("UICorner", box)
-    corner.CornerRadius = UDim.new(0, 6)
-    return box
-end
-
--- GUI setup
-local gui = Instance.new("ScreenGui", player.PlayerGui)
-gui.Name = "UserGalaxyGUI"
-gui.ResetOnSpawn = false
-
--- Tab Bar (fixed top)
-local tabBar = Instance.new("Frame", gui)
-tabBar.Size = UDim2.new(1, 0, 0, 40)
-tabBar.Position = UDim2.new(0, 0, 0, 0)
-tabBar.BackgroundColor3 = Color3.fromRGB(15, 15, 40)
-tabBar.BorderSizePixel = 0
-local tabBarCorner = Instance.new("UICorner", tabBar)
-tabBarCorner.CornerRadius = UDim.new(0, 8)
-
--- Minimize and Close Buttons
-local closeBtn = Instance.new("TextButton", tabBar)
-closeBtn.Size = UDim2.new(0, 36, 1, -8)
-closeBtn.Position = UDim2.new(1, -42, 0, 4)
-closeBtn.Text = "X"
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 18
-closeBtn.TextColor3 = Color3.new(1, 0.4, 0.4)
-closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-closeBtn.AutoButtonColor = true
-local closeBtnCorner = Instance.new("UICorner", closeBtn)
-closeBtnCorner.CornerRadius = UDim.new(0, 6)
-
-local minimizeBtn = Instance.new("TextButton", tabBar)
-minimizeBtn.Size = UDim2.new(0, 36, 1, -8)
-minimizeBtn.Position = UDim2.new(1, -84, 0, 4)
-minimizeBtn.Text = "-"
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.TextSize = 24
-minimizeBtn.TextColor3 = Color3.new(1, 1, 1)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-minimizeBtn.AutoButtonColor = true
-local minimizeBtnCorner = Instance.new("UICorner", minimizeBtn)
-minimizeBtnCorner.CornerRadius = UDim.new(0, 6)
-
--- Content window (draggable, below tabBar)
-local contentWnd = Instance.new("Frame", gui)
-contentWnd.Size = UDim2.new(0, 620, 0, 320)
-contentWnd.Position = UDim2.new(0.5, -310, 0, 40)
-contentWnd.BackgroundColor3 = Color3.fromRGB(15,15,40)
-contentWnd.BorderSizePixel = 0
-contentWnd.Active = true
-contentWnd.Draggable = true
-local contentCorner = Instance.new("UICorner", contentWnd)
-contentCorner.CornerRadius = UDim.new(0, 8)
-
--- Title label on contentWnd
-local contentTitle = Instance.new("TextLabel", contentWnd)
-contentTitle.Size = UDim2.new(1, -10, 0, 28)
-contentTitle.Position = UDim2.new(0, 5, 0, 5)
-contentTitle.BackgroundTransparency = 1
-contentTitle.Font = Enum.Font.GothamBold
-contentTitle.TextSize = 20
-contentTitle.TextColor3 = Color3.new(1,1,1)
-contentTitle.TextXAlignment = Enum.TextXAlignment.Left
-contentTitle.Text = "USER'S SS"
-glowBlackWhiteLabel(contentTitle)
-
--- Tabs and their contents
-local tabs = {
-    "Spam Stuff",
-    "Players",
-    "Chat Effects",
-    "Workspace",
-    "Music Controls",
-    "Skybox Controls"
-}
-
-local tabButtons = {}
-local tabFrames = {}
-local selectedTab = nil
-
--- Tab Buttons Container for scrolling
-local tabButtonsFrame = Instance.new("Frame", tabBar)
-tabButtonsFrame.Size = UDim2.new(1, -100, 1, 0)
-tabButtonsFrame.Position = UDim2.new(0, 0, 0, 0)
-tabButtonsFrame.BackgroundTransparency = 1
-tabButtonsFrame.ClipsDescendants = true
-
-local tabButtonsList = Instance.new("ScrollingFrame", tabButtonsFrame)
-tabButtonsList.Size = UDim2.new(1, 0, 1, 0)
-tabButtonsList.Position = UDim2.new(0, 0, 0, 0)
-tabButtonsList.BackgroundTransparency = 1
-tabButtonsList.BorderSizePixel = 0
-tabButtonsList.ScrollBarThickness = 6
-tabButtonsList.CanvasSize = UDim2.new(0, #tabs*110, 0, 0)
-tabButtonsList.HorizontalScrollBarInset = Enum.ScrollBarInset.ScrollBar
-
-local tabButtonLayout = Instance.new("UIListLayout", tabButtonsList)
-tabButtonLayout.FillDirection = Enum.FillDirection.Horizontal
-tabButtonLayout.SortOrder = Enum.SortOrder.LayoutOrder
-tabButtonLayout.Padding = UDim.new(0, 4)
-
--- Create tab buttons and content frames
-for i, tabName in ipairs(tabs) do
-    local btn = Instance.new("TextButton", tabButtonsList)
-    btn.Size = UDim2.new(0, 100, 1, -8)
-    btn.Text = tabName
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 14
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.BackgroundColor3 = Color3.fromRGB(88,36,133)
-    btn.AutoButtonColor = true
-    local corner = Instance.new("UICorner", btn)
-    corner.CornerRadius = UDim.new(0, 6)
-    tabButtons[tabName] = btn
-
-    local frame = Instance.new("ScrollingFrame", contentWnd)
-    frame.Size = UDim2.new(1, -10, 1, -40)
-    frame.Position = UDim2.new(0, 5, 0, 35)
-    frame.BackgroundColor3 = Color3.fromRGB(20,20,50)
-    frame.BorderSizePixel = 0
-    frame.Visible = false
-    frame.ScrollBarThickness = 6
-    local cornerFrame = Instance.new("UICorner", frame)
-    cornerFrame.CornerRadius = UDim.new(0, 12)
-    tabFrames[tabName] = frame
-end
-
--- Select a tab function
-local function selectTab(tabName)
-    if selectedTab then
-        tabFrames[selectedTab].Visible = false
-        tabButtons[selectedTab].BackgroundColor3 = Color3.fromRGB(88,36,133)
+    local function stopSpamming()
+        isSpamming = false
+        for _, p in ipairs(parts) do if p.Parent then p:Destroy() end end
+        for _, b in ipairs(beams) do if b.Parent then b:Destroy() end end
+        parts, beams = {}, {}
     end
-    selectedTab = tabName
-    tabFrames[selectedTab].Visible = true
-    tabButtons[selectedTab].BackgroundColor3 = Color3.fromRGB(150,65,150)
-    contentTitle.Text = "USER'S SS - "..selectedTab
-end
 
--- Connect tab button clicks
-for tabName, btn in pairs(tabButtons) do
-    btn.MouseButton1Click:Connect(function()
-        selectTab(tabName)
-    end)
-end
-
--- Minimize / Restore
-local minimized = false
-minimizeBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    if minimized then
-        contentWnd.Visible = false
-        contentTitle.Visible = false
-        contentWnd.Active = false
-        contentWnd.Draggable = false
-        contentWnd.Size = UDim2.new(0, 620, 0, 0)
-        tabBar.Size = UDim2.new(1, 0, 0, 40)
-    else
-        contentWnd.Visible = true
-        contentTitle.Visible = true
-        contentWnd.Active = true
-        contentWnd.Draggable = true
-        contentWnd.Size = UDim2.new(0, 620, 0, 320)
-        tabBar.Size = UDim2.new(1, 0, 0, 40)
+    -- Music controls
+    local function playMusic(id)
+        if musicSound then musicSound:Destroy() end
+        musicSound = Instance.new("Sound", workspace)
+        musicSound.SoundId = "rbxassetid://"..id
+        musicSound.Looped = true
+        musicSound.Volume = 1
+        musicSound:Play()
     end
-end)
 
--- Close Button
-closeBtn.MouseButton1Click:Connect(function()
-    gui:Destroy()
-end)
+    local function stopMusic()
+        if musicSound then musicSound:Destroy() musicSound = nil end
+    end
 
--- Select first tab by default
-selectTab(tabs[1])
-
--- === Spam Stuff Tab Contents ===
-local spamFrame = tabFrames["Spam Stuff"]
-createRainbowLabel(spamFrame, "Part Spam Stuff", 10, 10)
-
-local startSpamBtn = createButton(spamFrame, "Start Spam", 10, 50, 150, 30, startSpamming)
-local stopSpamBtn = createButton(spamFrame, "Stop Spam", 180, 50, 150, 30, stopSpamming)
-
--- Particle Spammer button
-createRainbowLabel(spamFrame, "Particle Spam Stuff", 10, 100)
-local particleSpamBtn = createButton(spamFrame, "Particle Spam", 10, 140, 150, 30, function()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character and plr.Character:FindFirstChild("Head") then
-            local emit = Instance.new("ParticleEmitter")
-            emit.Parent = plr.Character.Head
-            emit.Texture = "https://create.roblox.com/store/asset/70808795321734/boom-shakala-this-is-me-USER"
-            emit.VelocitySpread = 100000
+    -- Delete Terrain button action
+    local function deleteTerrain()
+        if Workspace:FindFirstChild("Terrain") then
+            Workspace.Terrain:Clear()
         end
     end
-end)
 
--- Decal Spammer button
-createRainbowLabel(spamFrame, "Decal Spam Stuff", 10, 190)
-local decalSpamBtn = createButton(spamFrame, "Decal Spam", 10, 230, 150, 30, function()
-    local function exPro(root)
-        for _, v in pairs(root:GetChildren()) do
-            if v:IsA("Decal") and v.Texture ~= "https://create.roblox.com/store/asset/70808795321734/boom-shakala-this-is-me-USER" then
-                v.Parent = nil
-            elseif v:IsA("BasePart") then
-                v.Material = Enum.Material.Plastic
-                v.Transparency = 0
-                local One = Instance.new("Decal", v)
-                local Two = Instance.new("Decal", v)
-                local Three = Instance.new("Decal", v)
-                local Four = Instance.new("Decal", v)
-                local Five = Instance.new("Decal", v)
-                local Six = Instance.new("Decal", v)
-                local decalTexture = "https://create.roblox.com/store/asset/70808795321734/boom-shakala-this-is-me-USER"
-                One.Texture = decalTexture
-                Two.Texture = decalTexture
-                Three.Texture = decalTexture
-                Four.Texture = decalTexture
-                Five.Texture = decalTexture
-                Six.Texture = decalTexture
-                One.Face = Enum.NormalId.Front
-                Two.Face = Enum.NormalId.Back
-                Three.Face = Enum.NormalId.Right
-                Four.Face = Enum.NormalId.Left
-                Five.Face = Enum.NormalId.Top
-                Six.Face = Enum.NormalId.Bottom
+    -- Create button helper with deep purple and rounded corners
+    local function createButton(parent, text, posX, posY, width, height, callback)
+        local btn = Instance.new("TextButton", parent)
+        btn.Size = UDim2.new(0, width or 150, 0, height or 30)
+        btn.Position = UDim2.new(0, posX, 0, posY)
+        btn.Text = text
+        btn.BackgroundColor3 = Color3.fromRGB(88, 36, 133) -- Deep purple
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.AutoButtonColor = true
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        local corner = Instance.new("UICorner", btn)
+        corner.CornerRadius = UDim.new(0, 6)
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    -- Create label helper with black-white glow tween
+    local function createLabel(parent, text, posX, posY)
+        local lbl = Instance.new("TextLabel", parent)
+        lbl.Size = UDim2.new(0, 200, 0, 24)
+        lbl.Position = UDim2.new(0, posX, 0, posY)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 18
+        lbl.Text = text
+        lbl.TextColor3 = Color3.new(1,1,1)
+        glowBlackWhiteLabel(lbl)
+        return lbl
+    end
+
+    -- Create TextBox helper with black background, white text, rounded corners
+    local function createTextBox(parent, placeholder, posX, posY, width, height)
+        local box = Instance.new("TextBox", parent)
+        box.Size = UDim2.new(0, width or 200, 0, height or 30)
+        box.Position = UDim2.new(0, posX, 0, posY)
+        box.PlaceholderText = placeholder or ""
+        box.TextColor3 = Color3.new(1,1,1)
+        box.BackgroundColor3 = Color3.new(0,0,0)
+        box.ClearTextOnFocus = false
+        box.Text = ""
+        local corner = Instance.new("UICorner", box)
+        corner.CornerRadius = UDim.new(0, 6)
+        return box
+    end
+
+    -- GUI setup
+    local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+    gui.Name = "UserGalaxyGUI"
+    gui.ResetOnSpawn = false
+
+    -- Tab Bar (top)
+    local tabBar = Instance.new("Frame", gui)
+    tabBar.Size = UDim2.new(1, 0, 0, 40)
+    tabBar.Position = UDim2.new(0, 0, 0, 0)
+    tabBar.BackgroundColor3 = Color3.fromRGB(15,15,40) -- Deep blue
+    tabBar.BorderSizePixel = 0
+    local tabBarCorner = Instance.new("UICorner", tabBar)
+    tabBarCorner.CornerRadius = UDim.new(0, 8)
+
+    -- Minimize and Close Buttons
+    local closeBtn = Instance.new("TextButton", tabBar)
+    closeBtn.Size = UDim2.new(0, 36, 1, -8)
+    closeBtn.Position = UDim2.new(1, -42, 0, 4)
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 18
+    closeBtn.TextColor3 = Color3.new(1, 0.4, 0.4)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    closeBtn.AutoButtonColor = true
+    local closeBtnCorner = Instance.new("UICorner", closeBtn)
+    closeBtnCorner.CornerRadius = UDim.new(0, 6)
+
+    local minimizeBtn = Instance.new("TextButton", tabBar)
+    minimizeBtn.Size = UDim2.new(0, 36, 1, -8)
+    minimizeBtn.Position = UDim2.new(1, -84, 0, 4)
+    minimizeBtn.Text = "-"
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.TextSize = 24
+    minimizeBtn.TextColor3 = Color3.new(1, 1, 1)
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    minimizeBtn.AutoButtonColor = true
+    local minimizeBtnCorner = Instance.new("UICorner", minimizeBtn)
+    minimizeBtnCorner.CornerRadius = UDim.new(0, 6)
+
+    -- Content window (draggable, below tabBar)
+    local contentWnd = Instance.new("Frame", gui)
+    contentWnd.Size = UDim2.new(0, 620, 0, 320)
+    contentWnd.Position = UDim2.new(0.5, -310, 0, 40)
+    contentWnd.BackgroundColor3 = Color3.fromRGB(15,15,40)
+    contentWnd.BorderSizePixel = 0
+    contentWnd.Active = true
+    contentWnd.Draggable = true
+    local contentCorner = Instance.new("UICorner", contentWnd)
+    contentCorner.CornerRadius = UDim.new(0, 8)
+
+    -- Title label on contentWnd
+    local contentTitle = Instance.new("TextLabel", contentWnd)
+    contentTitle.Size = UDim2.new(1, -10, 0, 28)
+    contentTitle.Position = UDim2.new(0, 5, 0, 5)
+    contentTitle.BackgroundTransparency = 1
+    contentTitle.Font = Enum.Font.GothamBold
+    contentTitle.TextSize = 20
+    contentTitle.TextColor3 = Color3.new(1,1,1)
+    contentTitle.TextXAlignment = Enum.TextXAlignment.Left
+    contentTitle.Text = "USER'S SS"
+    glowBlackWhiteLabel(contentTitle)
+
+    -- Tabs and their contents
+    local tabs = {
+        "Spam Stuff",
+        "Players",
+        "Chat Effects",
+        "Workspace",
+        "Music Controls",
+        "Skybox Controls"
+    }
+
+    local tabButtons = {}
+    local tabFrames = {}
+    local selectedTab = nil
+
+    -- Tab Buttons Container for scrolling
+    local tabButtonsFrame = Instance.new("Frame", tabBar)
+    tabButtonsFrame.Size = UDim2.new(1, -100, 1, 0)
+    tabButtonsFrame.Position = UDim2.new(0, 0, 0, 0)
+    tabButtonsFrame.BackgroundTransparency = 1
+    tabButtonsFrame.ClipsDescendants = true
+
+    local tabButtonsList = Instance.new("ScrollingFrame", tabButtonsFrame)
+    tabButtonsList.Size = UDim2.new(1, 0, 1, 0)
+    tabButtonsList.Position = UDim2.new(0, 0, 0, 0)
+    tabButtonsList.BackgroundTransparency = 1
+    tabButtonsList.BorderSizePixel = 0
+    tabButtonsList.ScrollBarThickness = 6
+    tabButtonsList.CanvasSize = UDim2.new(0, #tabs*110, 0, 0)
+    tabButtonsList.HorizontalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+
+    local tabButtonLayout = Instance.new("UIListLayout", tabButtonsList)
+    tabButtonLayout.FillDirection = Enum.FillDirection.Horizontal
+    tabButtonLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabButtonLayout.Padding = UDim.new(0, 4)
+
+    -- Create tab buttons and content frames
+    for i, tabName in ipairs(tabs) do
+        local btn = Instance.new("TextButton", tabButtonsList)
+        btn.Size = UDim2.new(0, 100, 1, -8)
+        btn.Text = tabName
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14 -- Smaller text size so it fits
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.BackgroundColor3 = Color3.fromRGB(88,36,133)
+        btn.AutoButtonColor = true
+        local corner = Instance.new("UICorner", btn)
+        corner.CornerRadius = UDim.new(0, 6)
+        tabButtons[tabName] = btn
+
+        local frame = Instance.new("ScrollingFrame", contentWnd)
+        frame.Size = UDim2.new(1, -10, 1, -40)
+        frame.Position = UDim2.new(0, 5, 0, 35)
+        frame.BackgroundColor3 = Color3.fromRGB(20,20,50)
+        frame.BorderSizePixel = 0
+        frame.Visible = false
+        frame.ScrollBarThickness = 6
+        local cornerFrame = Instance.new("UICorner", frame)
+        cornerFrame.CornerRadius = UDim.new(0, 12)
+        tabFrames[tabName] = frame
+    end
+
+    -- Select a tab function
+    local function selectTab(tabName)
+        if selectedTab then
+            tabFrames[selectedTab].Visible = false
+            tabButtons[selectedTab].BackgroundColor3 = Color3.fromRGB(88,36,133)
+        end
+        selectedTab = tabName
+        tabFrames[selectedTab].Visible = true
+        tabButtons[selectedTab].BackgroundColor3 = Color3.fromRGB(150,65,150)
+        contentTitle.Text = "USER'S SS - "..selectedTab
+    end
+
+    -- Connect tab button clicks
+    for tabName, btn in pairs(tabButtons) do
+        btn.MouseButton1Click:Connect(function()
+            selectTab(tabName)
+        end)
+    end
+
+    -- Minimize / Restore
+    local minimized = false
+    minimizeBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            contentWnd.Visible = false
+            contentTitle.Visible = false
+            contentWnd.Active = false
+            contentWnd.Draggable = false
+            contentWnd.Size = UDim2.new(0, 620, 0, 0)
+            tabBar.Size = UDim2.new(1, 0, 0, 40)
+        else
+            contentWnd.Visible = true
+            contentTitle.Visible = true
+            contentWnd.Active = true
+            contentWnd.Draggable = true
+            contentWnd.Size = UDim2.new(0, 620, 0, 320)
+            tabBar.Size = UDim2.new(1, 0, 0, 40)
+        end
+    end)
+
+    -- Close Button
+    closeBtn.MouseButton1Click:Connect(function()
+        gui:Destroy()
+    end)
+
+    -- Select first tab by default
+    selectTab(tabs[1])
+
+    -- === Spam Stuff Tab Contents ===
+    local spamFrame = tabFrames["Spam Stuff"]
+    createLabel(spamFrame, "Part Spam Stuff", 10, 10)
+    local startSpamBtn = createButton(spamFrame, "Start Spam", 10, 50, 150, 30, startSpamming)
+    local stopSpamBtn = createButton(spamFrame, "Stop Spam", 180, 50, 150, 30, stopSpamming)
+
+    -- Particle Spam (updated with user asset id and logic)
+    createLabel(spamFrame, "Particle Spam Stuff", 10, 100)
+    local function particleSpam()
+        for _, v in pairs(Players:GetPlayers()) do
+            if v.Character and v.Character:FindFirstChild("Head") then
+                local emit = Instance.new("ParticleEmitter")
+                emit.Parent = v.Character.Head
+                emit.Texture = "rbxassetid://70808795321734"
+                emit.VelocitySpread = 100000
             end
-            exPro(v)
         end
     end
-    exPro(Workspace)
-end)
+    local particleSpamBtn = createButton(spamFrame, "Particle Spam", 10, 140, 150, 30, particleSpam)
 
--- === Players Tab Contents ===
-local playersFrame = tabFrames["Players"]
-createRainbowLabel(playersFrame, "Speed Stuff", 10, 10)
+    -- Decal Spammer
+    createLabel(spamFrame, "Decal Spam Stuff", 10, 190)
+    local function decalSpam()
+        local assetId = "rbxassetid://70808795321734"
+        local function exPro(root)
+            for _, v in pairs(root:GetChildren()) do
+                if v:IsA("Decal") and v.Texture ~= assetId then
+                    v:Destroy()
+                elseif v:IsA("BasePart") then
+                    v.Material = Enum.Material.Plastic
+                    v.Transparency = 0
+                    local faces = {"Front","Back","Right","Left","Top","Bottom"}
+                    for _, face in pairs(faces) do
+                        local d = Instance.new("Decal", v)
+                        d.Face = Enum.NormalId[face]
+                        d.Texture = assetId
+                    end
+                end
+                exPro(v)
+            end
+        end
+        exPro(workspace)
+    end
+    local decalSpamBtn = createButton(spamFrame, "Decal Spam", 180, 190, 150, 30, decalSpam)
 
-local function setAllWalkSpeed(speed)
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character and plr.Character:FindFirstChild("Humanoid") then
-            plr.Character.Humanoid.WalkSpeed = speed
+    -- === Players Tab Contents ===
+    local playersFrame = tabFrames["Players"]
+    createLabel(playersFrame, "Speed Stuff", 10, 10)
+    local function setAllWalkspeed(speed)
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") then
+                plr.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = speed
+            end
         end
     end
-end
+    createButton(playersFrame, "Fast All", 10, 50, 150, 30, function() setAllWalkspeed(50) end)
+    createButton(playersFrame, "Normal", 180, 50, 150, 30, function() setAllWalkspeed(16) end)
+    createButton(playersFrame, "Slow", 350, 50, 150, 30, function() setAllWalkspeed(5) end)
 
-createButton(playersFrame, "Fast All (50)", 10, 50, 150, 30, function() setAllWalkSpeed(50) end)
-createButton(playersFrame, "Normal (16)", 180, 50, 150, 30, function() setAllWalkSpeed(16) end)
-createButton(playersFrame, "Slow (5)", 350, 50, 150, 30, function() setAllWalkSpeed(5) end)
-
-createRainbowLabel(playersFrame, "Camera Stuff", 10, 100)
-
-local function setOthersCameraMode(mode)
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") then
-            plr.Character.Humanoid.CameraOffset = Vector3.new(0,0,0) -- reset any offset
-            plr.CameraMode = mode
+    createLabel(playersFrame, "Camera Stuff", 10, 100)
+    local function setCameraModeForOthers(mode)
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= player and plr.Character and plr.Character:FindFirstChildOfClass("Humanoid") then
+                plr.CameraMode = mode
+            end
         end
     end
-end
+    createButton(playersFrame, "First Person Others", 10, 140, 150, 30, function() setCameraModeForOthers(Enum.CameraMode.LockFirstPerson) end)
+    createButton(playersFrame, "Normal Camera Others", 180, 140, 150, 30, function() setCameraModeForOthers(Enum.CameraMode.Classic) end)
 
-createButton(playersFrame, "First Person Others", 10, 140, 200, 30, function()
-    setOthersCameraMode(Enum.CameraMode.LockFirstPerson)
-end)
+    -- === Chat Effects Tab Contents ===
+    local chatFrame = tabFrames["Chat Effects"]
+    createLabel(chatFrame, "Rainbow Chat Controls", 10, 10)
 
-createButton(playersFrame, "Normal Camera Others", 220, 140, 200, 30, function()
-    setOthersCameraMode(Enum.CameraMode.Classic)
-end)
+    local chatBgBox = createTextBox(chatFrame, "Chat Background RGB e.g. 255,0,0", 10, 50, 200, 30)
+    local chatTextBox = createTextBox(chatFrame, "Chat Text RGB e.g. 255,255,255", 220, 50, 200, 30)
 
--- === Chat Effects Tab Contents ===
-local chatFrame = tabFrames["Chat Effects"]
-createRainbowLabel(chatFrame, "Chat Color Effects", 10, 10)
+    local rainbowRunning = false
+    local rainbowConnection
 
-local chatBgBox = createTextBox(chatFrame, "Chat Background Color RGB (e.g. 64,35,62)", 10, 50, 300, 30)
-local chatTextBox = createTextBox(chatFrame, "Chat Text Color RGB (e.g. 255,255,255)", 320, 50, 280, 30)
-
-local rainbowChatEnabled = false
-local rainbowChatConnection = nil
-
-local function applyChatColors(bgColor3, textColor3)
-    local chatConfig = TextChatService.ChatWindowConfiguration
-    if chatConfig then
-        chatConfig.BackgroundColor3 = bgColor3
-        chatConfig.TextColor3 = textColor3
+    local function startRainbowChat()
+        if rainbowRunning then return end
+        rainbowRunning = true
+        rainbowConnection = RunService.Heartbeat:Connect(function()
+            local bgColor = getRainbowColor(0.5, 0)
+            local textColor = getRainbowColor(0.5, 0.5)
+            local conf = TextChatService.ChatWindowConfiguration
+            conf.BackgroundColor3 = bgColor
+            conf.TextColor3 = textColor
+        end)
     end
-end
 
-local function parseRGB(str)
-    local r, g, b = str:match("(%d+)%s*,%s*(%d+)%s*,%s*(%d+)")
-    if r and g and b then
-        r = math.clamp(tonumber(r), 0, 255)/255
-        g = math.clamp(tonumber(g), 0, 255)/255
-        b = math.clamp(tonumber(b), 0, 255)/255
-        return Color3.new(r, g, b)
+    local function stopRainbowChat()
+        if rainbowConnection then
+            rainbowConnection:Disconnect()
+            rainbowConnection = nil
+        end
+        rainbowRunning = false
+        local conf = TextChatService.ChatWindowConfiguration
+        conf.BackgroundColor3 = Color3.new(0,0,0)
+        conf.TextColor3 = Color3.new(1,1,1)
     end
-    return nil
-end
 
-local function startRainbowChat()
-    if rainbowChatEnabled then return end
-    rainbowChatEnabled = true
-    rainbowChatConnection = RunService.Heartbeat:Connect(function()
-        local t = tick()
-        local bgCol = Color3.fromHSV((t*0.2)%1,1,1)
-        local txtCol = Color3.fromHSV(((t*0.2)+0.5)%1,1,1)
-        applyChatColors(bgCol, txtCol)
+    createButton(chatFrame, "Start Rainbow Chat", 10, 100, 150, 30, startRainbowChat)
+    createButton(chatFrame, "Stop Rainbow Chat", 180, 100, 150, 30, stopRainbowChat)
+
+    -- === Workspace Tab Contents ===
+    local workspaceFrame = tabFrames["Workspace"]
+    createLabel(workspaceFrame, "Workspace Controls", 10, 10)
+    createButton(workspaceFrame, "Delete Terrain", 10, 50, 150, 30, deleteTerrain)
+
+    -- Skybox changer button
+    local function changeSkybox()
+        local sky = Instance.new("Sky")
+        sky.Name = "CustomSky"
+        sky.Parent = Lighting
+        local assetId = "108493850623012" -- user asset id
+        for _, face in pairs({"Bk","Dn","Ft","Lf","Rt","Up"}) do
+            sky["Skybox"..face] = "http://www.roblox.com/asset/?id="..assetId
+        end
+        Lighting.TimeOfDay = 12
+    end
+    createButton(workspaceFrame, "Change Skybox", 180, 50, 150, 30, changeSkybox)
+
+    -- === Music Controls Tab Contents ===
+    local musicFrame = tabFrames["Music Controls"]
+    createLabel(musicFrame, "Music Player", 10, 10)
+    local musicIdBox = createTextBox(musicFrame, "Audio ID", 10, 50, 200, 30)
+    local playMusicBtn = createButton(musicFrame, "Play Music", 220, 50, 150, 30, function()
+        local id = tonumber(musicIdBox.Text)
+        if id then
+            playMusic(id)
+        end
     end)
-end
+    local stopMusicBtn = createButton(musicFrame, "Stop Music", 380, 50, 150, 30, stopMusic)
 
-local function stopRainbowChat()
-    rainbowChatEnabled = false
-    if rainbowChatConnection then
-        rainbowChatConnection:Disconnect()
-        rainbowChatConnection = nil
-    end
-    applyChatColors(Color3.new(0,0,0), Color3.new(1,1,1))
-end
-
-local startRainbowBtn = createButton(chatFrame, "Start Rainbow Chat", 10, 100, 200, 30, startRainbowChat)
-local stopRainbowBtn = createButton(chatFrame, "Stop Rainbow Chat", 220, 100, 200, 30, stopRainbowChat)
-
--- === Workspace Tab Contents ===
-local workspaceFrame = tabFrames["Workspace"]
-createRainbowLabel(workspaceFrame, "Workspace Controls", 10, 10)
-
-createButton(workspaceFrame, "Delete Terrain", 10, 50, 150, 30, deleteTerrain)
-
--- === Music Controls Tab Contents ===
-local musicFrame = tabFrames["Music Controls"]
-createRainbowLabel(musicFrame, "Music Controls", 10, 10)
-
-local musicIdBox = createTextBox(musicFrame, "Enter Audio ID", 10, 50, 300, 30)
-local playMusicBtn = createButton(musicFrame, "Play Music", 320, 50, 150, 30, function()
-    local id = musicIdBox.Text
-    if tonumber(id) then
-        playMusic(id)
-    end
-end)
-local stopMusicBtn = createButton(musicFrame, "Stop Music", 480, 50, 120, 30, stopMusic)
-
--- === Skybox Controls Tab Contents ===
-local skyboxFrame = tabFrames["Skybox Controls"]
-createRainbowLabel(skyboxFrame, "Skybox Controls", 10, 10)
-
-local function setSkybox(assetId)
-    local s = Instance.new("Sky")
-    s.Name = "UserSkybox"
-    s.Parent = Lighting
-    local url = "http://www.roblox.com/asset/?id="..assetId
-    s.SkyboxBk = url
-    s.SkyboxDn = url
-    s.SkyboxFt = url
-    s.SkyboxLf = url
-    s.SkyboxRt = url
-    s.SkyboxUp = url
-    Lighting.TimeOfDay = 12
-end
-
-local setSkyboxBtn = createButton(skyboxFrame, "Set Skybox", 10, 50, 150, 30, function()
-    setSkybox("70808795321734") -- the decal asset ID you provided
-end)
-
-local function clearSkybox()
-    local sky = Lighting:FindFirstChild("UserSkybox")
-    if sky then
-        sky:Destroy()
-    end
-    Lighting.TimeOfDay = 14
-end
-
-local clearSkyboxBtn = createButton(skyboxFrame, "Clear Skybox", 180, 50, 150, 30, clearSkybox)
-
--- That's the complete script with all requested tabs and features.
-
-return gui -- Just in case
+    -- Return the GUI for further use if needed
+    return gui
+end)()
